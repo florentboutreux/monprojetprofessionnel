@@ -55,13 +55,6 @@
             from { opacity: 0; transform: translateY(20px) scale(0.95); }
             to { opacity: 1; transform: translateY(0) scale(1); }
         }
-
-        /* Typography pour le contenu généré par l'IA (HTML brut) */
-        .prose h3 { font-size: 1.1em; font-weight: 700; margin-top: 1em; margin-bottom: 0.5em; color: #1e293b; }
-        .prose ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 1em; }
-        .prose li { margin-bottom: 0.25em; }
-        .prose strong { color: #0f172a; }
-        .prose p { margin-bottom: 0.75em; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 h-screen overflow-hidden flex flex-col">
@@ -70,9 +63,10 @@
 
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
-        const apiKey = ""; // API Key fournie par l'environnement local, vide sur GitHub
+        const apiKey = ""; // API Key injectée par l'environnement
         const MODEL_NAME = 'gemini-2.5-flash-preview-09-2025';
-        
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
+
         // Marqueur interne pour détecter l'import CV
         const CV_MARKER = "--- CONTENU CV (Restructuré par IA) ---";
 
@@ -85,7 +79,7 @@
             return <i className={`${icon} ${className}`}></i>;
         };
 
-        // --- DONNÉES (RESTITUTION INTÉGRALE) ---
+        // --- DONNÉES (RESTITUTION INTÉGRALE DU FICHIER ORIGINE) ---
         const DATA = {
             situation_globale: {
                 id: 'situation_globale', pillar: "1. MON DIAGNOSTIC", title: "Ma Situation Globale", icon: "fa-solid fa-user-doctor", color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-200", 
@@ -107,7 +101,7 @@
                     ], tools: [{ label: "Cap Emploi", url: "https://www.capemploi.net/" }, { label: "Prestation PAS", url: "https://www.francetravail.fr/" }, { label: "Formation courte TH", url: "https://www.francetravail.fr/" }, { label: "Regards Croisés", url: "https://www.francetravail.fr/" }, { label: "Accompagnement LUA", url: "https://www.francetravail.fr/" }] },
                     { title: "Famille & Contraintes", icon: "fa-solid fa-people-roof", questions: [
                         "Commune d'habitation",
-                        "Situation familiale",
+                        "Situation personnelle, familiale",
                         "Obligation(s) personnelle(s)",
                         "Situation financière (allocation, laquelle, durée etc....)",
                         "Soutien au projet ou/et à la réalisation du projet ?",
@@ -305,51 +299,89 @@
 
         const PILLARS_ORDER = ["1. MON DIAGNOSTIC", "2. MON CAP", "3. MA STRATÉGIE"];
 
-        // --- COMPOSANT INTEGRÉ : CARTOGRAPHIE DES COMPÉTENCES (IA) ---
+        // --- COMPOSANT ANALYSE CV (INTÉGRATION DU CODE FOURNI) ---
         const SkillsAnalysis = ({ onBack }) => {
             const [targetJob, setTargetJob] = useState("");
             const [pastJobs, setPastJobs] = useState("");
             const [isLoading, setIsLoading] = useState(false);
             const [isCvLoading, setIsCvLoading] = useState(false);
-            const [loadingText, setLoadingText] = useState(""); // Pour le détail du chargement CV
             const [errorMsg, setErrorMsg] = useState("");
             const [results, setResults] = useState(null);
             
-            // Gestion de la clé API pour GitHub / Environnements externes
-            const [geminiKey, setGeminiKey] = useState(apiKey || localStorage.getItem('gemini_api_key') || '');
-            const [showKeyInput, setShowKeyInput] = useState(!apiKey && !localStorage.getItem('gemini_api_key'));
-
             // États pour les fonctionnalités "Aller plus loin" et "Zoom"
             const [extraContent, setExtraContent] = useState({ visible: false, loading: false, html: "", title: "", color: "" });
             const [modal, setModal] = useState({ visible: false, loading: false, html: "", title: "", color: "" });
-            
+
             const cvInputRef = useRef(null);
-            const resultsRef = useRef(null);
-            const extraRef = useRef(null);
 
-            // Fonction pour obtenir l'URL API dynamique
-            const getApiUrl = () => `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${geminiKey}`;
+            // --- GESTION UPLOAD CV (PDF) - AVEC NETTOYAGE IA ---
+            const handleCvUpload = async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
 
-            const handleKeyChange = (e) => {
-                const newKey = e.target.value;
-                setGeminiKey(newKey);
-                localStorage.setItem('gemini_api_key', newKey);
+                if (file.type !== 'application/pdf') {
+                    alert("Veuillez sélectionner un fichier PDF valide.");
+                    return;
+                }
+
+                setIsCvLoading(true);
+                setErrorMsg("");
+
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const typedarray = new Uint8Array(arrayBuffer);
+                    const loadingTask = pdfjsLib.getDocument(typedarray);
+                    
+                    const pdf = await loadingTask.promise;
+                    let fullText = "";
+                    let hasText = false;
+
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        const pageText = textContent.items
+                            .map(item => item.str)
+                            .filter(str => str.trim().length > 0)
+                            .join(' ');
+                        
+                        if (pageText.length > 50) hasText = true;
+                        fullText += pageText + "\n\n";
+                    }
+
+                    if (!hasText) throw new Error("EMPTY_OR_SCANNED_PDF");
+
+                    // Nettoyage par IA
+                    const cleanedText = await cleanCvWithAI(fullText);
+                    
+                    const currentVal = pastJobs.trim();
+                    const cleanVal = currentVal.split(CV_MARKER)[0].trim();
+                    setPastJobs((cleanVal ? cleanVal + "\n\n" : "") + CV_MARKER + "\n\n" + cleanedText);
+
+                } catch (error) {
+                    console.error("Erreur PDF:", error);
+                    let msg = "Impossible de lire ce fichier PDF.";
+                    if (error.message === "EMPTY_OR_SCANNED_PDF") msg = "Ce PDF semble être une image (scan) et ne contient pas de texte lisible.";
+                    alert(msg);
+                } finally {
+                    setIsCvLoading(false);
+                    if(cvInputRef.current) cvInputRef.current.value = '';
+                }
             };
 
             const cleanCvWithAI = async (rawText) => {
                 const safeRawText = rawText.substring(0, 12000);
                 const prompt = `
-                Tu es un assistant administratif. Voici le texte brut extrait d'un fichier PDF de CV :
+                Tu es un assistant administratif. Voici le texte brut extrait d'un fichier PDF de CV, qui est probablement désordonné :
                 """${safeRawText}"""
                 TACHE : Réécris ce contenu proprement pour qu'il soit lisible dans un champ texte simple.
                 1. Identifie et liste les expériences professionnelles (Poste, Entreprise, Dates, Missions).
                 2. Identifie les formations principales.
                 3. Supprime le texte inutile (numéros de page, mentions légales).
-                4. Utilise un formatage simple avec des tirets (-). Pas de Markdown complexe (pas de gras).
+                4. Utilise un formatage simple avec des tirets (-). Pas de Markdown complexe.
                 Réponds uniquement avec le texte nettoyé.`;
 
                 try {
-                    const response = await fetch(getApiUrl(), {
+                    const response = await fetch(API_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
@@ -357,103 +389,12 @@
                     const data = await response.json();
                     return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || rawText;
                 } catch (e) {
-                    console.warn("Erreur API nettoyage:", e);
-                    return rawText; // Fallback
+                    return rawText;
                 }
             };
 
-            // Fonction commune de traitement PDF
-            const processPdfData = async (arrayBuffer) => {
-                const typedarray = new Uint8Array(arrayBuffer);
-                const loadingTask = pdfjsLib.getDocument(typedarray);
-                
-                loadingTask.onPassword = (updatePassword, reason) => {
-                    const password = prompt(reason === 1 ? 'Ce PDF est protégé. Mot de passe :' : 'Mot de passe incorrect.');
-                    updatePassword(password);
-                };
-
-                const pdf = await loadingTask.promise;
-                let fullText = "";
-                let hasText = false;
-
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    setLoadingText(`Lecture page ${i}/${pdf.numPages}...`);
-                    const page = await pdf.getPage(i);
-                    const textContent = await page.getTextContent();
-                    const pageText = textContent.items
-                        .map(item => item.str)
-                        .filter(str => str.trim().length > 0)
-                        .join(' ');
-                    
-                    if (pageText.length > 50) hasText = true;
-                    fullText += pageText + "\n\n";
-                }
-
-                if (!hasText) throw new Error("EMPTY_OR_SCANNED_PDF");
-
-                setLoadingText("IA : Restructuration et nettoyage du CV...");
-                const cleanedText = await cleanCvWithAI(fullText);
-                
-                const currentVal = pastJobs.trim();
-                const cleanVal = currentVal.split(CV_MARKER)[0].trim();
-                setPastJobs((cleanVal ? cleanVal + "\n\n" : "") + CV_MARKER + "\n\n" + cleanedText);
-            };
-
-            // 1a. Upload Fichier Local
-            const handleCvUpload = async (event) => {
-                if (!geminiKey) { alert("Veuillez d'abord renseigner votre clé API Google Gemini ci-dessus."); return; }
-                const file = event.target.files[0];
-                if (!file) return;
-                if (file.type !== 'application/pdf') { alert("Veuillez sélectionner un PDF."); return; }
-
-                setIsCvLoading(true);
-                setLoadingText("Extraction du texte...");
-                setErrorMsg("");
-
-                try {
-                    const arrayBuffer = await file.arrayBuffer();
-                    await processPdfData(arrayBuffer);
-                } catch (error) {
-                    console.error("Erreur PDF:", error);
-                    alert("Erreur lecture PDF : " + error.message);
-                } finally {
-                    setIsCvLoading(false);
-                    setLoadingText("");
-                    if(cvInputRef.current) cvInputRef.current.value = '';
-                }
-            };
-
-            // 1b. Import via URL (Github etc)
-            const handleUrlUpload = async () => {
-                if (!geminiKey) { alert("Veuillez d'abord renseigner votre clé API Google Gemini ci-dessus."); return; }
-                const url = prompt("Entrez l'URL directe du fichier PDF (ex: https://raw.githubusercontent.com/.../cv.pdf) :");
-                if (!url) return;
-
-                setIsCvLoading(true);
-                setLoadingText("Téléchargement du PDF...");
-                setErrorMsg("");
-
-                try {
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error("Erreur téléchargement (" + response.status + ")");
-                    const arrayBuffer = await response.arrayBuffer();
-                    await processPdfData(arrayBuffer);
-                } catch (error) {
-                    console.error("Erreur URL:", error);
-                    alert("Impossible de charger ce PDF. Vérifiez l'URL et les permissions CORS (Les liens 'raw' GitHub fonctionnent généralement).");
-                } finally {
-                    setIsCvLoading(false);
-                    setLoadingText("");
-                }
-            };
-
-            // 2. LOGIQUE D'ANALYSE PRINCIPALE
+            // --- LOGIQUE ANALYSE PRINCIPALE ---
             const startAnalysis = async () => {
-                if (!geminiKey) {
-                    setErrorMsg("⚠️ Clé API manquante. Veuillez la renseigner en haut de page.");
-                    setShowKeyInput(true);
-                    return;
-                }
                 if(!targetJob || !pastJobs) {
                     setErrorMsg("⚠️ Veuillez remplir le métier visé ET les expériences passées.");
                     return;
@@ -464,7 +405,7 @@
                 setResults(null);
                 setExtraContent(prev => ({ ...prev, visible: false }));
 
-                const SYSTEM_PROMPT = `
+                const SYSTEM_PROMPT_INT = `
                 Tu es un expert en orientation professionnelle chez France Travail. 
                 Ta mission : Analyser le parcours d'un candidat pour identifier ses compétences transférables vers un métier cible et suggérer des pistes de formation.
                 Format de réponse attendu (JSON uniquement) :
@@ -479,52 +420,33 @@
                 Ne mets pas de texte avant ou après le JSON.`;
 
                 try {
-                    const response = await fetch(getApiUrl(), {
+                    const response = await fetch(API_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             contents: [{ parts: [{ text: `Métier visé: ${targetJob}. Expériences: ${pastJobs.substring(0, 15000)}.` }] }],
-                            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+                            systemInstruction: { parts: [{ text: SYSTEM_PROMPT_INT }] },
                             generationConfig: { responseMimeType: "application/json" }
                         })
                     });
 
-                    if (!response.ok) {
-                        const err = await response.json();
-                        throw new Error(err.error?.message || "Erreur API");
-                    }
-
                     const data = await response.json();
                     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                    
-                    if (!rawText) throw new Error("Aucune réponse de l'IA");
-
-                    // Nettoyage JSON si nécessaire
-                    let cleanJson = rawText.trim();
-                    const firstBrace = cleanJson.indexOf('{');
-                    const lastBrace = cleanJson.lastIndexOf('}');
-                    if (firstBrace !== -1 && lastBrace !== -1) {
-                        cleanJson = cleanJson.substring(firstBrace, lastBrace + 1);
+                    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        setResults(JSON.parse(jsonMatch[0]));
+                    } else {
+                        throw new Error("Impossible de décoder la réponse.");
                     }
-
-                    setResults(JSON.parse(cleanJson));
-                    
-                    // Scroll vers les résultats
-                    setTimeout(() => {
-                        if(resultsRef.current) resultsRef.current.scrollIntoView({ behavior: 'smooth' });
-                    }, 100);
-
                 } catch (e) {
-                    console.error(e);
-                    setErrorMsg("Une erreur est survenue (" + e.message + "). Vérifiez votre clé API.");
+                    setErrorMsg("Une erreur est survenue lors de l'analyse.");
                 } finally {
                     setIsLoading(false);
                 }
             };
 
-            // 3. FONCTIONS ZOOM & CONSEILS
+            // --- FONCTIONS ZOOM & CONSEILS ---
             const zoomDetails = async (category) => {
-                if (!geminiKey) return alert("Clé API manquante");
                 setModal({ visible: true, loading: true, html: "", title: "", color: "" });
                 let prompt = "";
                 let titleText = "";
@@ -533,29 +455,24 @@
                 switch(category) {
                     case 'savoir_faire':
                         titleText = "🛠️ Analyse détaillée : Savoir-Faire Techniques"; headerColor = "bg-blue-50";
-                        prompt = `Tu es un expert métier pour le poste de : ${targetJob}. Expériences : ${pastJobs.substring(0, 5000)}. 
-                        Détaille les COMPÉTENCES TECHNIQUES (Hard Skills). 
-                        1. Ce qu'il maîtrise déjà. 
-                        2. Ce qu'il DOIT maîtriser (logiciels précis, normes). 
-                        Réponds en HTML simple.`;
+                        prompt = `Tu es un expert métier pour le poste de : ${targetJob}. Expériences : ${pastJobs.substring(0, 5000)}. Détaille les COMPÉTENCES TECHNIQUES (Hard Skills) acquises et à acquérir. Réponds en HTML simple.`;
                         break;
                     case 'savoir_etre':
                         titleText = "🤝 Analyse détaillée : Savoir-Être (Soft Skills)"; headerColor = "bg-green-50";
-                        prompt = `Coach RH. Poste : ${targetJob}. Détaille les SAVOIR-ÊTRE requis. Donne un exemple concret de situation pro pour chaque qualité. Réponds en HTML simple.`;
+                        prompt = `Coach RH. Poste : ${targetJob}. Détaille les SAVOIR-ÊTRE requis avec des exemples concrets de situations pro. Réponds en HTML simple.`;
                         break;
                     case 'gaps':
                         titleText = "🚀 Analyse détaillée : Écarts à combler"; headerColor = "bg-orange-50";
-                        prompt = `Conseiller en évolution. Poste : ${targetJob}. Expériences : ${pastJobs.substring(0, 5000)}. Analyse les ÉCARTS (Gaps). Distingue ce qui est critique de ce qui s'apprend sur le tas. Réponds en HTML simple.`;
+                        prompt = `Conseiller en évolution. Poste : ${targetJob}. Expériences : ${pastJobs.substring(0, 5000)}. Analyse les ÉCARTS (Gaps) et leur criticité. Réponds en HTML simple.`;
                         break;
                     case 'formation':
                         titleText = "🎓 Analyse détaillée : Plan de Formation"; headerColor = "bg-purple-50";
-                        prompt = `Expert formation France Travail. Poste : ${targetJob}. Suggère des formations précises (Titres Pro RNCP, code RNCP si possible, durée estimée). Mentionne les dispositifs (CPF, POE). Réponds en HTML simple.`;
+                        prompt = `Expert formation France Travail. Poste : ${targetJob}. Suggère des formations (Titres Pro RNCP) et dispositifs (CPF, POE). Réponds en HTML simple.`;
                         break;
-                    default: break;
                 }
 
                 try {
-                    const response = await fetch(getApiUrl(), {
+                    const response = await fetch(API_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
@@ -564,32 +481,26 @@
                     const html = data.candidates?.[0]?.content?.parts?.[0]?.text.replace(/```html/g, '').replace(/```/g, '');
                     setModal({ visible: true, loading: false, html, title: titleText, color: headerColor });
                 } catch (e) {
-                    setModal(prev => ({ ...prev, loading: false, html: "<p class='text-red-600'>Erreur lors de la génération.</p>" }));
+                    setModal(prev => ({ ...prev, loading: false, html: "<p>Erreur.</p>" }));
                 }
             };
 
             const getAdvice = async (type) => {
-                if (!geminiKey) return alert("Clé API manquante");
                 setExtraContent({ visible: true, loading: true, html: "", title: "", color: "" });
-                // Scroll
-                setTimeout(() => {
-                    if(extraRef.current) extraRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }, 100);
-
                 let prompt = "";
                 let title = "";
                 let color = "";
 
                 if (type === 'cv') {
                     title = "📌 Propositions d'amélioration pour le CV"; color = "text-indigo-800";
-                    prompt = `Expert RH. Profil : ${pastJobs.substring(0, 5000)}. Poste : ${targetJob}. Donne 3 à 5 recommandations concrètes pour le CV (mots-clés, structure). HTML simple.`;
+                    prompt = `Expert RH. Profil : ${pastJobs.substring(0, 5000)}. Poste : ${targetJob}. 3 à 5 conseils pour adapter le CV. HTML simple.`;
                 } else {
                     title = "🎙️ Arguments clés pour l'entretien"; color = "text-teal-800";
-                    prompt = `Coach recrutement. Poste : ${targetJob}. Profil : ${pastJobs.substring(0, 5000)}. 3 à 5 punchlines/arguments pour convaincre le recruteur. HTML simple.`;
+                    prompt = `Coach recrutement. Poste : ${targetJob}. Profil : ${pastJobs.substring(0, 5000)}. 3 à 5 punchlines d'entretien. HTML simple.`;
                 }
 
                 try {
-                    const response = await fetch(getApiUrl(), {
+                    const response = await fetch(API_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
@@ -598,47 +509,22 @@
                     const html = data.candidates?.[0]?.content?.parts?.[0]?.text.replace(/```html/g, '').replace(/```/g, '');
                     setExtraContent({ visible: true, loading: false, html, title, color });
                 } catch (e) {
-                    setExtraContent(prev => ({ ...prev, loading: false, html: "<p>Erreur.</p>" }));
+                    setExtraContent(prev => ({ ...prev, loading: false, html: "Erreur." }));
                 }
             };
 
             const hasCv = pastJobs.includes("CONTENU CV") || pastJobs.length > 50;
 
             return (
-                <div className="bg-slate-50 h-full w-full overflow-y-auto p-4 md:p-8 animate-fade-in pb-20 relative">
-                    {/* Header Outil */}
+                <div className="bg-slate-50 min-h-full p-4 md:p-8 animate-fade-in pb-20 relative">
+                    <button onClick={onBack} className="text-slate-500 hover:text-ft-blue mb-6 font-medium flex items-center gap-2">
+                        <i className="fa-solid fa-arrow-left"></i> Retour
+                    </button>
+                    
                     <div className="max-w-5xl mx-auto">
-                        <div className="flex justify-between items-center mb-6">
-                            <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-ft-blue transition-colors font-medium text-sm bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-100 w-fit">
-                                <i className="fa-solid fa-arrow-left"></i> Retour Tableau de Bord
-                            </button>
-                            {/* Bouton de configuration API */}
-                            <button onClick={() => setShowKeyInput(!showKeyInput)} className="text-xs text-slate-400 hover:text-slate-600 underline">
-                                {showKeyInput ? "Masquer config API" : "Configurer API Key (GitHub/Local)"}
-                            </button>
-                        </div>
-
-                        {/* Zone de configuration API pour GitHub/Hosting externe */}
-                        {showKeyInput && (
-                            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg animate-fade-in">
-                                <label className="block text-xs font-bold text-yellow-800 mb-2">Clé API Google Gemini (Requise sur GitHub)</label>
-                                <div className="flex gap-2">
-                                    <input 
-                                        type="password" 
-                                        value={geminiKey} 
-                                        onChange={handleKeyChange} 
-                                        placeholder="Entrez votre clé API (AI Studio)..." 
-                                        className="flex-1 p-2 text-sm border border-yellow-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                                    />
-                                    <a href="https://aistudio.google.com/app/apikey" target="_blank" className="px-3 py-2 bg-yellow-600 text-white text-xs font-bold rounded hover:bg-yellow-700 flex items-center">Obtenir une clé</a>
-                                </div>
-                                <p className="text-[10px] text-yellow-700 mt-1">La clé est stockée uniquement dans votre navigateur.</p>
-                            </div>
-                        )}
-
                         <header className="text-center mb-10">
                             <div className="inline-block p-3 rounded-full bg-blue-100 mb-4">
-                                <svg className="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                                <svg className="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
                             </div>
                             <h1 className="text-3xl md:text-4xl font-extrabold text-blue-900 mb-2">Cartographie des Compétences</h1>
                             <p className="text-lg text-blue-600">Assistant d'analyse & Formation</p>
@@ -652,38 +538,22 @@
                                     <textarea value={targetJob} onChange={(e) => setTargetJob(e.target.value)} rows="1" placeholder="Ex: Assistant Administratif, Plombier, Développeur..." className="w-full p-4 border border-gray-300 rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition shadow-inner resize-none"></textarea>
                                 </div>
                                 <div>
-                                    <div className="flex justify-between items-end mb-2 gap-2 flex-wrap">
+                                    <div className="flex justify-between items-end mb-2">
                                         <label className="block text-lg font-semibold text-gray-700">2. Expériences passées</label>
-                                        <div className="flex gap-2">
-                                            <button onClick={handleUrlUpload} className="text-xs bg-white text-slate-600 hover:bg-slate-50 px-3 py-1.5 rounded-md border border-slate-300 transition flex items-center gap-2 font-medium" title="Importer via URL (ex: GitHub Raw)">
-                                                <i className="fa-solid fa-link"></i> Via Lien
-                                            </button>
-                                            <input type="file" ref={cvInputRef} accept=".pdf" className="hidden" onChange={handleCvUpload} />
-                                            <button onClick={() => cvInputRef.current.click()} className="text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-1.5 rounded-md border border-blue-200 transition flex items-center gap-2 font-medium">
-                                                <i className="fa-solid fa-file-pdf"></i> Importer PDF
-                                            </button>
-                                        </div>
+                                        <input type="file" ref={cvInputRef} accept=".pdf" className="hidden" onChange={handleCvUpload} />
+                                        <button onClick={() => cvInputRef.current.click()} className="text-sm bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-1.5 rounded-md border border-blue-200 transition flex items-center gap-2 font-medium">
+                                            <i className="fa-solid fa-file-pdf"></i> Importer un CV (PDF)
+                                        </button>
                                     </div>
-                                    
                                     {isCvLoading && (
                                         <div className="text-sm text-blue-600 mb-2 flex items-center bg-blue-50 p-2 rounded">
-                                            <i className="fa-solid fa-circle-notch fa-spin mr-2"></i> {loadingText || "Analyse..."}
+                                            <i className="fa-solid fa-circle-notch fa-spin mr-2"></i> Analyse du fichier en cours...
                                         </div>
                                     )}
-
-                                    <textarea 
-                                        value={pastJobs} 
-                                        onChange={(e) => setPastJobs(e.target.value)} 
-                                        disabled={isCvLoading}
-                                        rows="8" 
-                                        placeholder="Saisissez vos expériences ou importez votre CV..." 
-                                        className={`w-full p-4 border border-gray-300 rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition shadow-inner resize-none ${pastJobs.includes(CV_MARKER) ? 'ring-2 ring-green-500/50' : ''}`}
-                                    ></textarea>
-                                    <p className="text-xs text-gray-500 mt-1 text-right">Le contenu du CV sera ajouté et nettoyé ci-dessus.</p>
+                                    <textarea value={pastJobs} onChange={(e) => setPastJobs(e.target.value)} rows="8" placeholder="Saisissez vos expériences ou importez votre CV..." className="w-full p-4 border border-gray-300 rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition shadow-inner resize-none"></textarea>
                                 </div>
-                                
                                 <div className="text-center pt-2">
-                                    <button type="button" onClick={startAnalysis} disabled={isLoading} className="w-full md:w-2/3 py-4 bg-blue-600 text-white font-bold text-lg rounded-lg shadow-lg hover:bg-blue-700 active:bg-blue-800 transition transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center mx-auto cursor-pointer">
+                                    <button onClick={startAnalysis} disabled={isLoading} className="w-full md:w-2/3 py-4 bg-blue-600 text-white font-bold text-lg rounded-lg shadow-lg hover:bg-blue-700 active:bg-blue-800 transition transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center mx-auto">
                                         {isLoading ? <><i className="fa-solid fa-circle-notch fa-spin mr-2"></i> Analyse en cours...</> : "Lancer l'Analyse des Compétences"}
                                     </button>
                                     {errorMsg && <p className="mt-4 text-red-600 font-medium bg-red-50 p-3 rounded-lg border border-red-200">{errorMsg}</p>}
@@ -691,9 +561,9 @@
                             </div>
                         </div>
 
-                        {/* Résultats */}
+                        {/* Zone de Résultats */}
                         {results && (
-                            <div ref={resultsRef} className="animate-fade-in space-y-8">
+                            <div className="animate-fade-in space-y-8">
                                 <div className="bg-white rounded-xl shadow-lg border border-blue-100 overflow-hidden">
                                     <div className="bg-blue-600 p-4 text-white">
                                         <h2 className="text-xl font-bold">Résultat pour : {results.targetJobTitle}</h2>
@@ -702,55 +572,46 @@
                                     </div>
                                     
                                     <div className="p-6 grid gap-6 md:grid-cols-2">
-                                        {/* Savoir-Faire */}
                                         <div onClick={() => zoomDetails('savoir_faire')} className="group cursor-pointer bg-blue-50 p-4 rounded-lg border border-blue-100 hover:shadow-lg hover:border-blue-300 transition relative">
-                                            <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition text-blue-500"><i className="fa-solid fa-magnifying-glass-plus"></i></div>
                                             <h3 className="font-bold text-blue-800 flex items-center mb-3">🛠️ Savoir-Faire (Hard Skills)</h3>
                                             <ul className="space-y-2 mt-2">
-                                                {results.savoirFaireTechniques?.map((item, i) => (
+                                                {results.savoirFaireTechniques.map((item, i) => (
                                                     <li key={i} className="flex items-start"><span className="mr-2 mt-1.5 w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"></span><span className="text-gray-700 text-sm">{item}</span></li>
                                                 ))}
                                             </ul>
-                                            <p className="text-xs text-blue-400 mt-3 text-center opacity-0 group-hover:opacity-100 transition font-semibold">Cliquez pour le détail technique</p>
+                                            <p className="text-xs text-blue-400 mt-3 text-center opacity-0 group-hover:opacity-100 transition">Cliquez pour le détail technique</p>
                                         </div>
 
-                                        {/* Savoir-Être */}
                                         <div onClick={() => zoomDetails('savoir_etre')} className="group cursor-pointer bg-green-50 p-4 rounded-lg border border-green-100 hover:shadow-lg hover:border-green-300 transition relative">
-                                            <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition text-green-500"><i className="fa-solid fa-magnifying-glass-plus"></i></div>
                                             <h3 className="font-bold text-green-800 flex items-center mb-3">🤝 Savoir-Être (Soft Skills)</h3>
                                             <ul className="space-y-2 mt-2">
-                                                {results.savoirEtreTransferables?.map((item, i) => (
+                                                {results.savoirEtreTransferables.map((item, i) => (
                                                     <li key={i} className="flex items-start"><span className="mr-2 mt-1.5 w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></span><span className="text-gray-700 text-sm">{item}</span></li>
                                                 ))}
                                             </ul>
-                                            <p className="text-xs text-green-500 mt-3 text-center opacity-0 group-hover:opacity-100 transition font-semibold">Cliquez pour voir des exemples</p>
+                                            <p className="text-xs text-green-500 mt-3 text-center opacity-0 group-hover:opacity-100 transition">Cliquez pour voir des exemples</p>
                                         </div>
 
-                                        {/* Gaps */}
                                         <div onClick={() => zoomDetails('gaps')} className="group cursor-pointer bg-orange-50 p-4 rounded-lg border border-orange-100 hover:shadow-lg hover:border-orange-300 transition relative">
-                                            <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition text-orange-500"><i className="fa-solid fa-magnifying-glass-plus"></i></div>
                                             <h3 className="font-bold text-orange-800 flex items-center mb-3">🚀 À Développer (Gaps)</h3>
                                             <ul className="space-y-2 mt-2">
-                                                {results.skillsGap?.map((item, i) => (
+                                                {results.skillsGap.map((item, i) => (
                                                     <li key={i} className="flex items-start"><span className="mr-2 mt-1.5 w-2 h-2 rounded-full bg-orange-500 flex-shrink-0"></span><span className="text-gray-700 text-sm">{item}</span></li>
                                                 ))}
                                             </ul>
-                                            <p className="text-xs text-orange-500 mt-3 text-center opacity-0 group-hover:opacity-100 transition font-semibold">Cliquez pour analyser les écarts</p>
+                                            <p className="text-xs text-orange-500 mt-3 text-center opacity-0 group-hover:opacity-100 transition">Cliquez pour analyser les écarts</p>
                                         </div>
 
-                                        {/* Formation */}
                                         <div onClick={() => zoomDetails('formation')} className="group cursor-pointer bg-purple-50 p-4 rounded-lg border border-purple-100 hover:shadow-lg hover:border-purple-300 transition relative">
-                                            <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition text-purple-500"><i className="fa-solid fa-magnifying-glass-plus"></i></div>
                                             <h3 className="font-bold text-purple-800 flex items-center mb-3">🎓 Besoins de Formation</h3>
                                             <ul className="space-y-2 mt-2">
-                                                {results.besoinsFormation?.map((item, i) => (
+                                                {results.besoinsFormation.map((item, i) => (
                                                     <li key={i} className="flex items-start"><span className="mr-2 mt-1.5 w-2 h-2 rounded-full bg-purple-500 flex-shrink-0"></span><span className="text-gray-700 text-sm">{item}</span></li>
                                                 ))}
                                             </ul>
-                                            <p className="text-xs text-purple-500 mt-3 text-center opacity-0 group-hover:opacity-100 transition font-semibold">Cliquez pour voir les titres RNCP</p>
+                                            <p className="text-xs text-purple-500 mt-3 text-center opacity-0 group-hover:opacity-100 transition">Cliquez pour voir les titres RNCP</p>
                                         </div>
                                     </div>
-                                    <div className="p-4 bg-gray-50 text-center text-xs text-gray-500 border-t">Document généré par l'assistant IA France Travail</div>
                                 </div>
 
                                 {/* Pour aller plus loin */}
@@ -764,7 +625,7 @@
                                         <div className="bg-white p-6 rounded-xl shadow-md border border-indigo-100 flex flex-col">
                                             <h4 className="font-bold text-lg text-indigo-900 mb-2">Optimisation du CV</h4>
                                             <p className="text-gray-600 text-sm mb-4 flex-grow">Obtenez des suggestions concrètes pour adapter le CV actuel au poste visé.</p>
-                                            <button onClick={() => getAdvice('cv')} disabled={!hasCv} className="w-full py-3 bg-indigo-50 text-indigo-600 font-semibold rounded-lg hover:bg-indigo-100 transition border border-indigo-200 disabled:opacity-50 disabled:bg-gray-100 disabled:text-gray-400">
+                                            <button onClick={() => getAdvice('cv')} disabled={!hasCv} className="w-full py-3 bg-indigo-50 text-indigo-600 font-semibold rounded-lg hover:bg-indigo-100 transition disabled:opacity-50 disabled:bg-gray-100 disabled:text-gray-400">
                                                 Améliorer mon CV {!hasCv && <span className="block text-[10px] font-normal mt-1">(Nécessite l'import d'un CV)</span>}
                                             </button>
                                         </div>
@@ -772,15 +633,14 @@
                                         <div className="bg-white p-6 rounded-xl shadow-md border border-teal-100 flex flex-col">
                                             <h4 className="font-bold text-lg text-teal-900 mb-2">Préparation à l'entretien</h4>
                                             <p className="text-gray-600 text-sm mb-4 flex-grow">Générez les arguments clés pour convaincre le recruteur.</p>
-                                            <button onClick={() => getAdvice('interview')} className="w-full py-3 bg-teal-50 text-teal-600 font-semibold rounded-lg hover:bg-teal-100 transition border border-teal-200">
+                                            <button onClick={() => getAdvice('interview')} className="w-full py-3 bg-teal-50 text-teal-600 font-semibold rounded-lg hover:bg-teal-100 transition">
                                                 Générer mes Arguments
                                             </button>
                                         </div>
                                     </div>
 
-                                    {/* Contenu Extra (Conseils/CV) */}
                                     {extraContent.visible && (
-                                        <div ref={extraRef} className="mt-6 bg-white p-6 rounded-xl shadow-lg border-2 border-dashed border-gray-300 animate-fade-in">
+                                        <div className="mt-6 bg-white p-6 rounded-xl shadow-lg border-2 border-dashed border-gray-300 animate-fade-in">
                                             {extraContent.loading ? (
                                                 <div className="flex justify-center py-4"><i className="fa-solid fa-circle-notch fa-spin text-2xl text-indigo-600"></i></div>
                                             ) : (
@@ -798,11 +658,10 @@
 
                     {/* Modale de Zoom */}
                     {modal.visible && (
-                        <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-                            <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                        <div className="fixed inset-0 z-50 overflow-y-auto">
+                            <div className="flex items-center justify-center min-h-screen p-4 text-center">
                                 <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setModal(prev => ({ ...prev, visible: false }))}></div>
-                                <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-                                <div className="relative inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full modal-enter">
+                                <div className="relative inline-block bg-white rounded-xl text-left overflow-hidden shadow-2xl transform transition-all sm:max-w-3xl sm:w-full modal-enter">
                                     <div className={`px-6 py-4 border-b flex justify-between items-center ${modal.color}`}>
                                         <h3 className="text-xl font-bold text-gray-900">{modal.title}</h3>
                                         <button onClick={() => setModal(prev => ({ ...prev, visible: false }))} className="text-gray-400 hover:text-gray-500"><i className="fa-solid fa-xmark text-xl"></i></button>
@@ -883,7 +742,7 @@
                         <div className="flex items-center gap-4">
                             <button className="lg:hidden text-slate-600" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}><i className="fa-solid fa-bars text-xl"></i></button>
                             <div className="flex items-center gap-4 cursor-pointer" onClick={() => setActiveSection(null)}>
-                                <div className="h-10 w-10 bg-ft-blue rounded flex items-center justify-center text-white font-bold text-xl">FT</div>
+                                <img src="logoFT.jpg" alt="" className="h-10 w-auto object-contain" />
                                 <div className="hidden sm:block border-l border-slate-200 pl-4">
                                     <h1 className="font-bold text-lg text-slate-800 leading-none">Définir mon projet professionnel</h1>
                                 </div>
@@ -977,24 +836,24 @@
                                                                 const hasLink = t.url && t.url !== '#' && t.url !== '';
                                                                 return (
                                                                     <div key={i} className={`flex items-center p-3 rounded-lg border transition-all ${isSelected ? 'bg-blue-50 border-ft-blue' : (hasLink ? 'bg-white border-slate-200 tool-link' : 'bg-slate-50 border-slate-100 tool-static')}`}>
-                                                                            <button onClick={() => toggleTool(t)} className="text-slate-400 hover:text-ft-blue p-1 mr-2"><i className={`fa-solid ${isSelected ? 'fa-check text-ft-blue' : 'fa-plus'}`}></i></button>
-                                                                            <div onClick={() => { if(isSpecial) setCurrentView('skills_tool'); else if(hasLink) window.open(t.url, '_blank'); }} className={`flex-1 flex items-center justify-between text-xs font-semibold ${hasLink || isSpecial ? 'cursor-pointer' : 'cursor-default text-slate-500'}`}>
-                                                                                <span className={`flex items-center gap-2 ${isSpecial ? 'text-indigo-600' : (hasLink ? 'text-ft-blue' : 'text-slate-500')}`}>
-                                                                                    {isSpecial && <i className="fa-solid fa-wand-magic-sparkles"></i>}{t.label}
-                                                                                </span>
-                                                                                {hasLink && !isSpecial && <i className="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-400"></i>}
-                                                                            </div>
+                                                                        <button onClick={() => toggleTool(t)} className="text-slate-400 hover:text-ft-blue p-1 mr-2"><i className={`fa-solid ${isSelected ? 'fa-check text-ft-blue' : 'fa-plus'}`}></i></button>
+                                                                        <div onClick={() => { if(isSpecial) setCurrentView('skills_tool'); else if(hasLink) window.open(t.url, '_blank'); }} className={`flex-1 flex items-center justify-between text-xs font-semibold ${hasLink || isSpecial ? 'cursor-pointer' : 'cursor-default text-slate-500'}`}>
+                                                                            <span className={`flex items-center gap-2 ${isSpecial ? 'text-indigo-600' : (hasLink ? 'text-ft-blue' : 'text-slate-500')}`}>
+                                                                                {isSpecial && <i className="fa-solid fa-wand-magic-sparkles"></i>}{t.label}
+                                                                            </span>
+                                                                            {hasLink && !isSpecial && <i className="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-400"></i>}
+                                                                        </div>
                                                                     </div>
                                                                 )
                                                             })}
                                                             
                                                             {(customTools[`${activeSection}-${idx}`] || []).map((t, cIdx) => (
                                                                 <div key={`c-${cIdx}`} className="flex items-center p-2 rounded-lg border border-dashed border-slate-300 bg-slate-50">
-                                                                        <button onClick={() => { 
-                                                                            const newT = {...customTools}; newT[`${activeSection}-${idx}`].splice(cIdx,1); 
-                                                                            setCustomTools(newT); localStorage.setItem('custom_tools', JSON.stringify(newT));
-                                                                        }} className="text-slate-300 hover:text-red-500 mr-2"><i className="fa-solid fa-trash text-xs"></i></button>
-                                                                        <a href={t.url} target="_blank" className="flex-1 truncate text-xs text-slate-500 hover:text-ft-blue hover:underline">{t.label}</a>
+                                                                    <button onClick={() => { 
+                                                                        const newT = {...customTools}; newT[`${activeSection}-${idx}`].splice(cIdx,1); 
+                                                                        setCustomTools(newT); localStorage.setItem('custom_tools', JSON.stringify(newT));
+                                                                    }} className="text-slate-300 hover:text-red-500 mr-2"><i className="fa-solid fa-trash text-xs"></i></button>
+                                                                    <a href={t.url} target="_blank" className="flex-1 truncate text-xs text-slate-500 hover:text-ft-blue hover:underline">{t.label}</a>
                                                                 </div>
                                                             ))}
                                                             
@@ -1054,3 +913,4 @@
     </script>
 </body>
 </html>
+
