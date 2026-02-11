@@ -36,7 +36,7 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
         
         /* Styles spécifiques pour les outils */
-        .tool-link { transition: all 0.2s; border-left: 3px solid #252e6f; }
+        .tool-link { transition: all 0.2s; border-left-width: 4px; }
         .tool-link:hover { transform: translateX(2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
         .tool-static { border-left: 3px solid #cbd5e1; background-color: #f1f5f9; opacity: 0.8; }
     </style>
@@ -296,6 +296,7 @@
             const [customTools, setCustomTools] = useState(JSON.parse(localStorage.getItem('custom_tools') || '{}'));
             const [addingMode, setAddingMode] = useState(null);
             const [newToolData, setNewToolData] = useState({ label: '', url: '' });
+            const [searchQuery, setSearchQuery] = useState('');
 
             const activeData = activeSection ? DATA[activeSection] : null;
             const groupedData = useMemo(() => {
@@ -304,8 +305,52 @@
                 return groups;
             }, []);
 
+            // --- RECHERCHE ---
+            const searchResults = useMemo(() => {
+                if (!searchQuery || searchQuery.length < 2) return null;
+                const results = [];
+                const q = searchQuery.toLowerCase();
+                
+                Object.values(DATA).forEach(section => {
+                    section.subsections.forEach((sub, subIdx) => {
+                        // Chercher dans les outils
+                        sub.tools.forEach(tool => {
+                            if (tool.label.toLowerCase().includes(q)) {
+                                results.push({ type: 'tool', section: section, subIdx, item: tool });
+                            }
+                        });
+                        // Chercher dans les questions
+                        sub.questions.forEach(question => {
+                            if (question.toLowerCase().includes(q)) {
+                                results.push({ type: 'question', section: section, subIdx, item: question });
+                            }
+                        });
+                    });
+                });
+                return results;
+            }, [searchQuery]);
+
+            // --- FONCTION CODE COULEUR OUTILS ---
+            const getToolStyle = (tool) => {
+                const label = tool.label.toLowerCase();
+                const url = tool.url ? tool.url.toLowerCase() : '';
+                
+                if (url.endsWith('.pdf')) {
+                    return { border: 'border-l-red-500', bg: 'bg-red-50', text: 'text-red-700', badge: 'PDF', badgeColor: 'bg-red-100 text-red-700' };
+                }
+                if (label.includes('atelier')) {
+                    return { border: 'border-l-purple-500', bg: 'bg-purple-50', text: 'text-purple-700', badge: 'ATELIER', badgeColor: 'bg-purple-100 text-purple-700' };
+                }
+                if (label.includes('mooc') || label.includes('vidéo')) {
+                    return { border: 'border-l-orange-500', bg: 'bg-orange-50', text: 'text-orange-700', badge: 'MÉDIA', badgeColor: 'bg-orange-100 text-orange-700' };
+                }
+                // Default Web Link
+                return { border: 'border-l-ft-blue', bg: 'bg-white', text: 'text-ft-blue', badge: 'WEB', badgeColor: 'bg-blue-100 text-blue-700' };
+            };
+
             const handleNavigation = (id, subIdx = null) => {
                 setActiveSection(id);
+                setSearchQuery(''); // Reset search on nav
                 setMobileMenuOpen(false);
                 if (subIdx !== null) {
                     setTimeout(() => {
@@ -332,18 +377,38 @@
 
             return (
                 <div className="h-screen flex flex-col">
-                    <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-30 shadow-sm">
+                    <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-30 shadow-sm gap-4">
                         <div className="flex items-center gap-4">
                             <button className="lg:hidden text-slate-600" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}><i className="fa-solid fa-bars text-xl"></i></button>
                             <div className="flex items-center gap-4 cursor-pointer" onClick={() => setActiveSection(null)}>
-                                <img src="logoFT.jpg" alt="Logo France Travail" className="h-10 w-auto object-contain" />
-                                <div className="hidden sm:block border-l border-slate-200 pl-4">
-                                    <h1 className="font-bold text-lg text-slate-800 leading-none">Définir mon projet professionnel</h1>
+                                <img src="logoFT.jpg" alt="Logo France Travail" className="h-10 w-auto object-contain hidden sm:block" />
+                                <div className="border-l border-slate-200 pl-4">
+                                    <h1 className="font-bold text-lg text-slate-800 leading-none hidden md:block">Mon Projet Professionnel</h1>
                                 </div>
                             </div>
                         </div>
-                        <button onClick={() => setShowNotes(!showNotes)} className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 text-sm font-bold ${showNotes ? 'bg-ft-blue text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
-                            <i className="fa-regular fa-file-lines"></i> Mon Plan {selectedTools.length > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 rounded-full">{selectedTools.length}</span>}
+
+                        {/* BARRE DE RECHERCHE */}
+                        <div className="flex-1 max-w-xl relative mx-2">
+                             <div className="relative">
+                                <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                                <input 
+                                    type="text" 
+                                    placeholder="Rechercher un outil, une question..." 
+                                    className="w-full pl-10 pr-4 py-2 rounded-full border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-ft-blue outline-none transition-all text-sm"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                                {searchQuery && (
+                                    <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                        <i className="fa-solid fa-xmark"></i>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        <button onClick={() => setShowNotes(!showNotes)} className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 text-sm font-bold whitespace-nowrap ${showNotes ? 'bg-ft-blue text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                            <i className="fa-regular fa-file-lines"></i> <span className="hidden sm:inline">Mon Plan</span> {selectedTools.length > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 rounded-full">{selectedTools.length}</span>}
                         </button>
                     </header>
 
@@ -382,93 +447,145 @@
                         {mobileMenuOpen && <div className="fixed inset-0 bg-black/50 z-10 lg:hidden" onClick={() => setMobileMenuOpen(false)}></div>}
 
                         <main className="flex-1 overflow-y-auto bg-slate-50 p-6 lg:p-10 scroll-smooth">
-                            {activeSection === null ? (
-                                <div className="animate-fade-in max-w-6xl mx-auto">
-                                    <h2 className="text-3xl font-bold text-slate-800 mb-8 text-center">Tableau de Bord Diagnostic</h2>
-                                    <div className="space-y-12">
-                                        {PILLARS_ORDER.map(pillar => (
-                                            <div key={pillar}>
-                                                <div className="flex items-center gap-4 mb-6"><div className="h-px bg-slate-200 flex-1"></div><h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">{pillar}</h3><div className="h-px bg-slate-200 flex-1"></div></div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                                    {groupedData[pillar].map(section => (
-                                                        <button key={section.id} onClick={() => handleNavigation(section.id)} className="text-left bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-lg hover:-translate-y-1 transition-all group">
-                                                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${section.bg} ${section.color} p-3`}><DynamicIcon icon={section.icon} className="text-xl" /></div>
-                                                            <h3 className="text-lg font-bold text-slate-800 mb-2 group-hover:text-ft-blue transition-colors">{section.title}</h3>
-                                                            <p className="text-sm text-slate-500">{section.description}</p>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ))}
+                            {/* AFFICHAGE RESULTATS RECHERCHE */}
+                            {searchQuery && searchResults ? (
+                                <div className="animate-fade-in max-w-4xl mx-auto">
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h2 className="text-xl font-bold text-slate-800">Résultats de recherche pour "{searchQuery}"</h2>
+                                        <button onClick={() => setSearchQuery('')} className="text-sm text-ft-blue hover:underline">Effacer la recherche</button>
                                     </div>
-                                </div>
-                            ) : (
-                                <div className="animate-fade-in max-w-4xl mx-auto pb-20">
-                                    <button onClick={() => setActiveSection(null)} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-ft-blue transition-colors font-medium text-sm bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-100 w-fit"><i className="fa-solid fa-arrow-left"></i> Retour</button>
-                                    <div className={`mb-8 p-6 rounded-2xl flex items-center gap-6 shadow-sm border border-slate-100 bg-white`}>
-                                        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl p-3 ${activeData.bg} ${activeData.color}`}><DynamicIcon icon={activeData.icon} /></div>
-                                        <div><div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">{activeData.pillar}</div><h2 className="text-3xl font-bold text-slate-800">{activeData.title}</h2></div>
-                                    </div>
-                                    <div className="space-y-8">
-                                        {activeData.subsections.map((sub, idx) => (
-                                            <div key={idx} id={`sub-${idx}`} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden scroll-mt-24">
-                                                <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center gap-3 font-bold"><DynamicIcon icon={sub.icon} className="text-ft-blue" /> <h3 className="text-lg text-slate-800">{sub.title}</h3></div>
-                                                <div className="p-8 grid lg:grid-cols-12 gap-8 items-start">
-                                                    <div className="lg:col-span-7">
-                                                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Questions & Points Clés</h4>
-                                                        <ul className="space-y-3">
-                                                            {sub.questions.map((q, i) => (
-                                                                <li key={i} className="flex gap-3 text-slate-600 text-sm group"><span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${activeData.color.replace('text-', 'bg-').replace('600', '400')}`}></span><span>{q}</span></li>
-                                                            ))}
-                                                        </ul>
-                                                    </div>
-                                                    <div className="lg:col-span-5 lg:border-l border-slate-100 lg:pl-8">
-                                                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Outils & Ressources</h4>
-                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                            {sub.tools.map((t, i) => {
-                                                                const isSelected = selectedTools.some(x => x.label === t.label);
-                                                                const hasLink = t.url && t.url !== '#' && t.url !== '';
-                                                                return (
-                                                                    <div key={i} className={`flex items-center p-3 rounded-lg border transition-all ${isSelected ? 'bg-blue-50 border-ft-blue' : (hasLink ? 'bg-white border-slate-200 tool-link' : 'bg-slate-50 border-slate-100 tool-static')}`}>
-                                                                            <button onClick={() => toggleTool(t)} className="text-slate-400 hover:text-ft-blue p-1 mr-2"><i className={`fa-solid ${isSelected ? 'fa-check text-ft-blue' : 'fa-plus'}`}></i></button>
-                                                                            <div onClick={() => { if(hasLink) window.open(t.url, '_blank'); }} className={`flex-1 flex items-center justify-between text-xs font-semibold ${hasLink ? 'cursor-pointer' : 'cursor-default text-slate-500'}`}>
-                                                                                <span className={`flex items-center gap-2 ${hasLink ? 'text-ft-blue' : 'text-slate-500'}`}>
-                                                                                    {t.label}
-                                                                                </span>
-                                                                                {hasLink && <i className="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-400"></i>}
-                                                                            </div>
-                                                                    </div>
-                                                                )
-                                                            })}
-                                                            
-                                                            {(customTools[`${activeSection}-${idx}`] || []).map((t, cIdx) => (
-                                                                <div key={`c-${cIdx}`} className="flex items-center p-2 rounded-lg border border-dashed border-slate-300 bg-slate-50">
-                                                                        <button onClick={() => {  
-                                                                            const newT = {...customTools}; newT[`${activeSection}-${idx}`].splice(cIdx,1);  
-                                                                            setCustomTools(newT); localStorage.setItem('custom_tools', JSON.stringify(newT));
-                                                                        }} className="text-slate-300 hover:text-red-500 mr-2"><i className="fa-solid fa-trash text-xs"></i></button>
-                                                                        <a href={t.url} target="_blank" className="flex-1 truncate text-xs text-slate-500 hover:text-ft-blue hover:underline">{t.label}</a>
+                                    
+                                    {searchResults.length === 0 ? (
+                                        <div className="text-center py-20 bg-white rounded-2xl border border-slate-100">
+                                            <i className="fa-solid fa-magnifying-glass text-4xl text-slate-200 mb-4"></i>
+                                            <p className="text-slate-500">Aucun résultat trouvé.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            {searchResults.map((res, idx) => {
+                                                const style = res.type === 'tool' ? getToolStyle(res.item) : null;
+                                                return (
+                                                    <div key={idx} onClick={() => {
+                                                        if (res.type === 'tool' && res.item.url && res.item.url !== '#' && res.item.url !== '') {
+                                                            window.open(res.item.url, '_blank');
+                                                        }
+                                                        handleNavigation(res.section.id, res.subIdx);
+                                                    }} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md cursor-pointer transition-all">
+                                                        <div className="flex items-start gap-4">
+                                                            <div className={`mt-1 p-2 rounded-lg ${res.section.bg} ${res.section.color}`}>
+                                                                <DynamicIcon icon={res.section.icon} />
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{res.section.title} &gt; {res.section.subsections[res.subIdx].title}</span>
+                                                                    {res.type === 'tool' && <span className={`text-[9px] px-1.5 rounded ${style.badgeColor}`}>{style.badge}</span>}
                                                                 </div>
-                                                            ))}
-                                                            
-                                                            {addingMode && addingMode.id === activeSection && addingMode.idx === idx ? (
-                                                                <div className="p-2 bg-slate-50 border border-blue-200 rounded-lg animate-fade-in">
-                                                                    <input autoFocus className="w-full mb-1 p-1 text-xs border rounded" placeholder="Nom" value={newToolData.label} onChange={e=>setNewToolData({...newToolData, label:e.target.value})} />
-                                                                    <input className="w-full mb-2 p-1 text-xs border rounded" placeholder="URL" value={newToolData.url} onChange={e=>setNewToolData({...newToolData, url:e.target.value})} />
-                                                                    <div className="flex justify-end gap-2"><button onClick={() => setAddingMode(null)} className="text-xs text-slate-400">Annuler</button><button onClick={saveCustomTool} className="text-xs bg-ft-blue text-white px-2 py-1 rounded">OK</button></div>
-                                                                </div>
-                                                            ) : (
-                                                                <button onClick={() => { setAddingMode({ id: activeSection, idx }); setNewToolData({label:'', url:''}); }} className="mt-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-400 hover:text-ft-blue hover:bg-slate-50 transition w-full">+ Lien perso</button>
-                                                            )}
+                                                                <p className={`text-sm ${res.type === 'tool' ? 'font-bold text-ft-blue' : 'text-slate-700'}`}>
+                                                                    {res.type === 'tool' ? res.item.label : res.item}
+                                                                </p>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                                {sub.customContent && <div className="px-8 pb-8">{sub.customContent}</div>}
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="h-20"></div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
+                            ) : (
+                                /* AFFICHAGE NORMAL */
+                                <>
+                                    {activeSection === null ? (
+                                        <div className="animate-fade-in max-w-6xl mx-auto">
+                                            <h2 className="text-3xl font-bold text-slate-800 mb-8 text-center">Tableau de Bord Diagnostic</h2>
+                                            <div className="space-y-12">
+                                                {PILLARS_ORDER.map(pillar => (
+                                                    <div key={pillar}>
+                                                        <div className="flex items-center gap-4 mb-6"><div className="h-px bg-slate-200 flex-1"></div><h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">{pillar}</h3><div className="h-px bg-slate-200 flex-1"></div></div>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                                            {groupedData[pillar].map(section => (
+                                                                <button key={section.id} onClick={() => handleNavigation(section.id)} className="text-left bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-lg hover:-translate-y-1 transition-all group">
+                                                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${section.bg} ${section.color} p-3`}><DynamicIcon icon={section.icon} className="text-xl" /></div>
+                                                                    <h3 className="text-lg font-bold text-slate-800 mb-2 group-hover:text-ft-blue transition-colors">{section.title}</h3>
+                                                                    <p className="text-sm text-slate-500">{section.description}</p>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="animate-fade-in max-w-4xl mx-auto pb-20">
+                                            <button onClick={() => setActiveSection(null)} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-ft-blue transition-colors font-medium text-sm bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-100 w-fit"><i className="fa-solid fa-arrow-left"></i> Retour</button>
+                                            <div className={`mb-8 p-6 rounded-2xl flex items-center gap-6 shadow-sm border border-slate-100 bg-white`}>
+                                                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl p-3 ${activeData.bg} ${activeData.color}`}><DynamicIcon icon={activeData.icon} /></div>
+                                                <div><div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">{activeData.pillar}</div><h2 className="text-3xl font-bold text-slate-800">{activeData.title}</h2></div>
+                                            </div>
+                                            <div className="space-y-8">
+                                                {activeData.subsections.map((sub, idx) => (
+                                                    <div key={idx} id={`sub-${idx}`} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden scroll-mt-24">
+                                                        <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center gap-3 font-bold"><DynamicIcon icon={sub.icon} className="text-ft-blue" /> <h3 className="text-lg text-slate-800">{sub.title}</h3></div>
+                                                        <div className="p-8 grid lg:grid-cols-12 gap-8 items-start">
+                                                            <div className="lg:col-span-7">
+                                                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Questions & Points Clés</h4>
+                                                                <ul className="space-y-3">
+                                                                    {sub.questions.map((q, i) => (
+                                                                        <li key={i} className="flex gap-3 text-slate-600 text-sm group"><span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${activeData.color.replace('text-', 'bg-').replace('600', '400')}`}></span><span>{q}</span></li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                            <div className="lg:col-span-5 lg:border-l border-slate-100 lg:pl-8">
+                                                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Outils & Ressources</h4>
+                                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                                    {sub.tools.map((t, i) => {
+                                                                        const isSelected = selectedTools.some(x => x.label === t.label);
+                                                                        const hasLink = t.url && t.url !== '#' && t.url !== '';
+                                                                        const toolStyle = getToolStyle(t);
+
+                                                                        return (
+                                                                            <div key={i} className={`flex items-center p-2.5 rounded-lg border transition-all ${isSelected ? 'bg-blue-50 border-ft-blue' : (hasLink ? `tool-link bg-white ${toolStyle.border}` : 'bg-slate-50 border-slate-100 tool-static')}`}>
+                                                                                <button onClick={() => toggleTool(t)} className="text-slate-400 hover:text-ft-blue p-1 mr-2"><i className={`fa-solid ${isSelected ? 'fa-check text-ft-blue' : 'fa-plus'}`}></i></button>
+                                                                                <div onClick={() => { if(hasLink) window.open(t.url, '_blank'); }} className={`flex-1 flex flex-col justify-center text-xs font-semibold ${hasLink ? 'cursor-pointer' : 'cursor-default text-slate-500'}`}>
+                                                                                    <span className={`flex items-start justify-between gap-2 ${hasLink ? 'text-slate-700' : 'text-slate-500'}`}>
+                                                                                        <span className="whitespace-normal leading-tight">{t.label}</span>
+                                                                                        {hasLink && <i className="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-50 mt-1 flex-shrink-0"></i>}
+                                                                                    </span>
+                                                                                    {hasLink && <span className={`text-[9px] w-fit px-1 rounded mt-1 ${toolStyle.badgeColor}`}>{toolStyle.badge}</span>}
+                                                                                </div>
+                                                                            </div>
+                                                                        )
+                                                                    })}
+                                                                    
+                                                                    {(customTools[`${activeSection}-${idx}`] || []).map((t, cIdx) => (
+                                                                        <div key={`c-${cIdx}`} className="flex items-center p-2 rounded-lg border border-dashed border-slate-300 bg-slate-50">
+                                                                                <button onClick={() => {  
+                                                                                    const newT = {...customTools}; newT[`${activeSection}-${idx}`].splice(cIdx,1);  
+                                                                                    setCustomTools(newT); localStorage.setItem('custom_tools', JSON.stringify(newT));
+                                                                                }} className="text-slate-300 hover:text-red-500 mr-2"><i className="fa-solid fa-trash text-xs"></i></button>
+                                                                                <a href={t.url} target="_blank" className="flex-1 whitespace-normal leading-tight text-xs text-slate-500 hover:text-ft-blue hover:underline">{t.label}</a>
+                                                                        </div>
+                                                                    ))}
+                                                                    
+                                                                    {addingMode && addingMode.id === activeSection && addingMode.idx === idx ? (
+                                                                        <div className="p-2 bg-slate-50 border border-blue-200 rounded-lg animate-fade-in">
+                                                                            <input autoFocus className="w-full mb-1 p-1 text-xs border rounded" placeholder="Nom" value={newToolData.label} onChange={e=>setNewToolData({...newToolData, label:e.target.value})} />
+                                                                            <input className="w-full mb-2 p-1 text-xs border rounded" placeholder="URL" value={newToolData.url} onChange={e=>setNewToolData({...newToolData, url:e.target.value})} />
+                                                                            <div className="flex justify-end gap-2"><button onClick={() => setAddingMode(null)} className="text-xs text-slate-400">Annuler</button><button onClick={saveCustomTool} className="text-xs bg-ft-blue text-white px-2 py-1 rounded">OK</button></div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <button onClick={() => { setAddingMode({ id: activeSection, idx }); setNewToolData({label:'', url:''}); }} className="mt-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-400 hover:text-ft-blue hover:bg-slate-50 transition w-full">+ Lien perso</button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        {sub.customContent && <div className="px-8 pb-8">{sub.customContent}</div>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="h-20"></div>
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </main>
 
@@ -507,20 +624,3 @@
     </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
