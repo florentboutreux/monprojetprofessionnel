@@ -57,7 +57,7 @@
             return <i className={`${icon} ${className}`}></i>;
         };
 
-        // --- DONNÉES CORRIGÉES ---
+        // --- DONNÉES ---
         const DATA = {
             situation_globale: {
                 id: 'situation_globale', pillar: "1. MON DIAGNOSTIC", title: "Ma Situation Globale", icon: "fa-solid fa-user-doctor", color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-200", 
@@ -515,7 +515,7 @@
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="animate-fade-in max-w-4xl mx-auto pb-20">
+                                        <div className="animate-fade-in max-w-[1600px] mx-auto pb-20">
                                             <button onClick={() => setActiveSection(null)} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-ft-blue transition-colors font-medium text-sm bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-100 w-fit"><i className="fa-solid fa-arrow-left"></i> Retour</button>
                                             <div className={`mb-8 p-6 rounded-2xl flex items-center gap-6 shadow-sm border border-slate-100 bg-white`}>
                                                 <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl p-3 ${activeData.bg} ${activeData.color}`}><DynamicIcon icon={activeData.icon} /></div>
@@ -525,8 +525,11 @@
                                                 {activeData.subsections.map((sub, idx) => (
                                                     <div key={idx} id={`sub-${idx}`} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden scroll-mt-24">
                                                         <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center gap-3 font-bold"><DynamicIcon icon={sub.icon} className="text-ft-blue" /> <h3 className="text-lg text-slate-800">{sub.title}</h3></div>
+                                                        
+                                                        {/* MODIFICATION ICI : Grille adaptative pour colonnes plus larges */}
                                                         <div className="p-8 grid lg:grid-cols-12 gap-8 items-start">
-                                                            <div className="lg:col-span-7">
+                                                            {/* COLONNE GAUCHE : Questions (7/12 sur LG, 6/12 sur XL, 5/12 sur 2XL) */}
+                                                            <div className="lg:col-span-7 xl:col-span-6 2xl:col-span-5">
                                                                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Questions & Points Clés</h4>
                                                                 <ul className="space-y-3">
                                                                     {sub.questions.map((q, i) => (
@@ -534,9 +537,12 @@
                                                                     ))}
                                                                 </ul>
                                                             </div>
-                                                            <div className="lg:col-span-5 lg:border-l border-slate-100 lg:pl-8">
+                                                            
+                                                            {/* COLONNE DROITE : Outils (5/12 sur LG, 6/12 sur XL, 7/12 sur 2XL) */}
+                                                            <div className="lg:col-span-5 xl:col-span-6 2xl:col-span-7 lg:border-l border-slate-100 lg:pl-8">
                                                                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Outils & Ressources</h4>
-                                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                                {/* MODIFICATION ICI : Grille interne passant à 3 colonnes sur 2XL */}
+                                                                <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-3">
                                                                     {sub.tools.map((t, i) => {
                                                                         const isSelected = selectedTools.some(x => x.label === t.label);
                                                                         const hasLink = t.url && t.url !== '#' && t.url !== '';
@@ -544,33 +550,33 @@
 
                                                                         return (
                                                                             <div key={i} className={`flex items-center p-2.5 rounded-lg border transition-all ${isSelected ? 'bg-blue-50 border-ft-blue' : (hasLink ? `tool-link bg-white ${toolStyle.border}` : 'bg-slate-50 border-slate-100 tool-static')}`}>
-                                                                                <button onClick={() => toggleTool(t)} className="text-slate-400 hover:text-ft-blue p-1 mr-2"><i className={`fa-solid ${isSelected ? 'fa-check text-ft-blue' : 'fa-plus'}`}></i></button>
-                                                                                <div onClick={() => { if(hasLink) window.open(t.url, '_blank'); }} className={`flex-1 flex flex-col justify-center text-xs font-semibold ${hasLink ? 'cursor-pointer' : 'cursor-default text-slate-500'}`}>
-                                                                                    <span className={`flex items-start justify-between gap-2 ${hasLink ? 'text-slate-700' : 'text-slate-500'}`}>
-                                                                                        <span className="whitespace-normal leading-tight">{t.label}</span>
-                                                                                        {hasLink && <i className="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-50 mt-1 flex-shrink-0"></i>}
-                                                                                    </span>
-                                                                                    {hasLink && <span className={`text-[9px] w-fit px-1 rounded mt-1 ${toolStyle.badgeColor}`}>{toolStyle.badge}</span>}
+                                                                                    <button onClick={() => toggleTool(t)} className="text-slate-400 hover:text-ft-blue p-1 mr-2"><i className={`fa-solid ${isSelected ? 'fa-check text-ft-blue' : 'fa-plus'}`}></i></button>
+                                                                                    <div onClick={() => { if(hasLink) window.open(t.url, '_blank'); }} className={`flex-1 flex flex-col justify-center text-xs font-semibold ${hasLink ? 'cursor-pointer' : 'cursor-default text-slate-500'}`}>
+                                                                                        <span className={`flex items-start justify-between gap-2 ${hasLink ? 'text-slate-700' : 'text-slate-500'}`}>
+                                                                                            <span className="whitespace-normal leading-tight">{t.label}</span>
+                                                                                            {hasLink && <i className="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-50 mt-1 flex-shrink-0"></i>}
+                                                                                        </span>
+                                                                                        {hasLink && <span className={`text-[9px] w-fit px-1 rounded mt-1 ${toolStyle.badgeColor}`}>{toolStyle.badge}</span>}
+                                                                                    </div>
                                                                                 </div>
-                                                                            </div>
                                                                         )
                                                                     })}
                                                                     
                                                                     {(customTools[`${activeSection}-${idx}`] || []).map((t, cIdx) => (
                                                                         <div key={`c-${cIdx}`} className="flex items-center p-2 rounded-lg border border-dashed border-slate-300 bg-slate-50">
-                                                                                <button onClick={() => {  
-                                                                                    const newT = {...customTools}; newT[`${activeSection}-${idx}`].splice(cIdx,1);  
-                                                                                    setCustomTools(newT); localStorage.setItem('custom_tools', JSON.stringify(newT));
-                                                                                }} className="text-slate-300 hover:text-red-500 mr-2"><i className="fa-solid fa-trash text-xs"></i></button>
-                                                                                <a href={t.url} target="_blank" className="flex-1 whitespace-normal leading-tight text-xs text-slate-500 hover:text-ft-blue hover:underline">{t.label}</a>
-                                                                        </div>
+                                                                                    <button onClick={() => {  
+                                                                                        const newT = {...customTools}; newT[`${activeSection}-${idx}`].splice(cIdx,1);  
+                                                                                        setCustomTools(newT); localStorage.setItem('custom_tools', JSON.stringify(newT));
+                                                                                    }} className="text-slate-300 hover:text-red-500 mr-2"><i className="fa-solid fa-trash text-xs"></i></button>
+                                                                                    <a href={t.url} target="_blank" className="flex-1 whitespace-normal leading-tight text-xs text-slate-500 hover:text-ft-blue hover:underline">{t.label}</a>
+                                                                                </div>
                                                                     ))}
                                                                     
                                                                     {addingMode && addingMode.id === activeSection && addingMode.idx === idx ? (
                                                                         <div className="p-2 bg-slate-50 border border-blue-200 rounded-lg animate-fade-in">
-                                                                            <input autoFocus className="w-full mb-1 p-1 text-xs border rounded" placeholder="Nom" value={newToolData.label} onChange={e=>setNewToolData({...newToolData, label:e.target.value})} />
-                                                                            <input className="w-full mb-2 p-1 text-xs border rounded" placeholder="URL" value={newToolData.url} onChange={e=>setNewToolData({...newToolData, url:e.target.value})} />
-                                                                            <div className="flex justify-end gap-2"><button onClick={() => setAddingMode(null)} className="text-xs text-slate-400">Annuler</button><button onClick={saveCustomTool} className="text-xs bg-ft-blue text-white px-2 py-1 rounded">OK</button></div>
+                                                                                <input autoFocus className="w-full mb-1 p-1 text-xs border rounded" placeholder="Nom" value={newToolData.label} onChange={e=>setNewToolData({...newToolData, label:e.target.value})} />
+                                                                                <input className="w-full mb-2 p-1 text-xs border rounded" placeholder="URL" value={newToolData.url} onChange={e=>setNewToolData({...newToolData, url:e.target.value})} />
+                                                                                <div className="flex justify-end gap-2"><button onClick={() => setAddingMode(null)} className="text-xs text-slate-400">Annuler</button><button onClick={saveCustomTool} className="text-xs bg-ft-blue text-white px-2 py-1 rounded">OK</button></div>
                                                                         </div>
                                                                     ) : (
                                                                         <button onClick={() => { setAddingMode({ id: activeSection, idx }); setNewToolData({label:'', url:''}); }} className="mt-2 py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-400 hover:text-ft-blue hover:bg-slate-50 transition w-full">+ Lien perso</button>
