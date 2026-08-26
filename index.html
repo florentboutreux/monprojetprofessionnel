@@ -212,7 +212,7 @@
                             "Avez-vous procédé à une estimation des coûts de transport, de repas et d’hébergement pour la durée de cette formation ?"
                         ],
                         tools: [{ label: "Taux FTAE par formation", url: "https://poleemploi.sharepoint.com/:x:/s/MT-OCC-DR-DAFG-BudgetControledeGestion/IQClxna2BIBcQJDHu0LMAglVAfs5Qy8sJA7xZytuzYEYpbk?e=Mfz8iG" }, { label: "Tableau récapitulatif des financements", url: "https://budi.francetravail.net/budi/jcms/508715967_BUDIDocument/" },{ label: "Fiche Budget prévisionnel", url: "https://florentboutreux.github.io/monprojetprofessionnel/FicheBudgetPrevisionnelFT.pdf" },{ label: "Formation Mode Emploi", url: "#" },{ label: "Simulateur France Travail", url: "https://candidat.francetravail.fr/portail-simulateurs/" }, { label: "VAE", url: "https://vae.gouv.fr/" },  { label: "Fiche Budi VAE", url: "https://budi.francetravail.net/budi/jcms/622467412_BUDIDocument/" }, { label: "DORA", url: "https://dora.inclusion.beta.gouv.fr/" }],
-                        customContent: (
+                   customContent: (
                             <div className="space-y-6">
                                 {/* BLOC 1 : Priorités */}
                                 <div className="flex items-center justify-center p-4 bg-slate-50 rounded-2xl">
@@ -230,17 +230,23 @@
                                         <div className="flex flex-col items-center gap-2">
                                             {[
                                                 { id: 1, label: "CPF (Compte Personnel)", color: "bg-emerald-500", width: "w-full", url: "https://www.moncompteformation.gouv.fr/" },
-                                                { id: 2, label: "POE (Préparation Opérationnelle)", color: "bg-indigo-600", width: "w-[90%]" },
-                                                { id: 3, label: "RÉGION", color: "bg-violet-600", width: "w-[80%]" },
-                                                { id: 4, label: "AIF (France Travail)", color: "bg-red-600", width: "w-[70%]" },
-                                                { id: 5, label: "AUTO-FINANCEMENT", color: "bg-slate-500", width: "w-[60%]" }
+                                                { id: 2, label: "POE (Préparation Opérationnelle)", color: "bg-indigo-600", width: "w-[90%]", url: "https://www.francetravail.fr/candidat/en-formation/les-dispositifs/la-preparation-operationnelle-a.html" },
+                                                { id: 3, label: "RÉGION", color: "bg-violet-600", width: "w-[80%]", url: "https://www.meformerenregion.fr/" },
+                                                { id: 4, label: "AIF (France Travail)", color: "bg-red-600", width: "w-[70%]", url: "https://www.francetravail.fr/candidat/en-formation/les-dispositifs/laide-individuelle-a-la-formatio.html" },
+                                                { id: 5, label: "AUTO-FINANCEMENT", color: "bg-slate-500", width: "w-[60%]", url: "" }
                                             ].map((item) => (
-                                                <div key={item.id} className={`${item.width} ${item.color} relative flex items-center justify-center py-2.5 text-white rounded-xl shadow-md transition-transform hover:scale-[1.01]`}>
+                                                <div 
+                                                    key={item.id} 
+                                                    onClick={() => item.url ? window.open(item.url, '_blank') : null}
+                                                    title={item.url ? `Ouvrir les informations sur : ${item.label}` : ""}
+                                                    className={`${item.width} ${item.color} relative flex items-center justify-center py-2.5 text-white rounded-xl shadow-md transition-all hover:scale-[1.02] hover:opacity-90 hover:shadow-lg ${item.url ? 'cursor-pointer' : ''}`}
+                                                >
                                                     <div className="absolute left-3 flex items-center justify-center w-5 h-5 bg-white/20 rounded-full text-[10px] font-bold">
                                                         {item.id}
                                                     </div>
-                                                    <span className="font-bold text-xs tracking-wide">
+                                                    <span className="font-bold text-xs tracking-wide flex items-center gap-2">
                                                         {item.label}
+                                                        {item.url && <i className="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-70"></i>}
                                                     </span>
                                                 </div>
                                             ))}
@@ -248,8 +254,6 @@
                                     </div>
                                  </div>
                              </div>
-                                
-                        )
                     },
 
               
