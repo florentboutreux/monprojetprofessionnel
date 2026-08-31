@@ -275,7 +275,44 @@
                         "Savez-vous vous abonner aux offres ?"
                     ], tools: [{ label: "offres d’emploi disponibles", url: "https://candidat.francetravail.fr/offres/emploi" }, { label: "Mes évènements emploi", url: "https://mesevenementsemploi.francetravail.fr/mes-evenements-emploi/evenements" }, { label: "Espace personnel", url: "https://www.francetravail.fr/candidat/votre-espace-personnel.html" }, { label: "Emploi Store", url: "https://www.emploi-store.fr/" }, { label: "Métierscope", url: "https://candidat.francetravail.fr/metierscope/" }, { label: "CV, IA et ATS", url: "https://florentboutreux.github.io/monprojetprofessionnel/FicheCVIAetsystemeATS.pdf" }, { label: "CV et IA, WebinaireGoogle", url: "https://www.youtube.com/GoogleAteliersNumeriques" }, { label: "La bonne boîte", url: "https://labonneboite.francetravail.fr/" },{ label: "Fiche ONISEP", url: "https://www.onisep.fr/" }, { label: "Enquête métier", url: "https://florentboutreux.github.io/monprojetprofessionnel/Enquetemetier.pdf" }, { label: "Immersion", url: "https://immersion-facile.beta.gouv.fr/" }, { label: "CV Designr", url: "https://cvdesignr.com/fr" }, { label: "Atelier Organiser ma recherche d’emploi", url:"https://messervices.francetravail.fr/centre-interet/organiser-et-optimiser-ma-recherche-demploi " }, { label: "Atelier CV", url: "https://messervices.francetravail.fr/centre-interet/faire-le-point-sur-mes-competences-professionnelles-et-concevoir-un-cv-percutant" }] }
                 ]
-            }
+            },
+        
+
+            creation_entreprise: {
+                id: 'creation_entreprise', pillar: "3. MA STRATÉGIE", title: "Création d'Entreprise", icon: "fa-solid fa-rocket", color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200",
+                description: "De l'idée à l'immatriculation.",
+                subsections: [
+                    { title: "L'Idée et le Marché", icon: "fa-solid fa-lightbulb", questions: [
+                        "Votre idée de création ou de reprise d'entreprise est-elle bien définie ?",
+                        "Avez-vous identifié votre clientèle cible et analysé la concurrence ?",
+                        "Avez-vous réalisé une étude de marché ou testé votre concept ?",
+                        "Quel est votre modèle économique (comment allez-vous générer du chiffre d'affaires) ?",
+                        "Avez-vous besoin d'acquérir de nouvelles compétences (gestion, commercial, technique) pour mener à bien ce projet ?"
+                    ], tools: [
+                        { label: "Activ'Créa", url: "https://www.francetravail.fr/candidat/votre-projet-professionnel/creer-ou-reprendre-une-entrepris/activcrea.html" }, 
+                        { label: "Bpifrance Création", url: "https://bpifrance-creation.fr/" }, 
+                        { label: "Atelier M'imaginer Créateur", url: "https://messervices.francetravail.fr/centre-interet/mimaginer-createur-dentreprise" },
+                        { label: "CCI / CMA", url: "https://www.cci.fr/" },
+                        { label: "BGE", url: "https://www.bge.asso.fr/" }
+                    ] },
+
+                    { title: "Financement et Statut", icon: "fa-solid fa-scale-balanced", questions: [
+                        "Avez-vous établi un plan de financement ou un prévisionnel financier ?",
+                        "Avez-vous réfléchi au statut juridique le plus adapté (Micro-entreprise, SASU, EURL...) ?",
+                        "Avez-vous simulé vos futures cotisations sociales et vos revenus ?",
+                        "Connaissez-vous les aides de France Travail (maintien de l'ARE ou versement de l'ARCE) ?",
+                        "Êtes-vous éligible à l'ACRE (exonération de charges) ?",
+                        "Savez-vous comment immatriculer votre entreprise sur le Guichet Unique ?"
+                    ], tools: [
+                        { label: "Aide ARCE (France Travail)", url: "https://www.francetravail.fr/candidat/mes-droits-aux-aides-et-allocati/aides-au-retour-a-lemploi/laide-a-la-reprise-ou-a-la-creat.html" }, 
+                        { label: "Simulateurs URSSAF", url: "https://mon-entreprise.urssaf.fr/" }, 
+                        { label: "Aide ACRE", url: "https://www.urssaf.fr/accueil/creer-entreprise/aides/acre.html" }, 
+                        { label: "Guichet Unique INPI", url: "https://procedures.inpi.fr/" },
+                        { label: "Adie (Microcrédit)", url: "https://www.adie.org/" },
+                        { label: "MOOC Création d'entreprise", url: "https://www.emploi-store.fr/portail/services/moocCreationDentreprise" }
+                    ] }
+                ]
+            },
         };
 
         const PILLARS_ORDER = ["1. MON DIAGNOSTIC", "2. MON CAP", "3. MA STRATÉGIE"];
